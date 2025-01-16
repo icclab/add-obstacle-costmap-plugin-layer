@@ -250,7 +250,7 @@ AddObstacleLayer::updateCosts(
         geometry_msgs::msg::TransformStamped transform;
         try {
           transform = tf_->lookupTransform(
-            obstacle_frame, costmap_frame, tf2::TimePointZero,
+            costmap_frame, obstacle_frame, tf2::TimePointZero,
             tf2::durationFromSec(5.0));
           
           tf2::fromMsg(transform.transform, tf2_transform);
