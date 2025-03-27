@@ -68,8 +68,9 @@ AddObstacleLayer::AddObstacleLayer()
   msg_wx_(-std::numeric_limits<float>::max()),
   msg_wy_(-std::numeric_limits<float>::max()),
   obstacle_sub_(nullptr),
-  update_window_height_m_(1.0),
-  update_window_width_m_(1.0)
+  update_radius_m_(1.0)
+  // update_window_height_m_(1.0),
+  // update_window_width_m_(1.0),
 {
   access_ = new mutex_t();
 }
@@ -90,16 +91,21 @@ AddObstacleLayer::onInitialize()
   auto node = node_.lock(); 
   declareParameter("enabled", rclcpp::ParameterValue(true));
   node->get_parameter(name_ + "." + "enabled", enabled_);
+
+  declareParameter("update_radius_m", rclcpp::ParameterValue(update_radius_m_));
+  node->get_parameter(name_ + "." + "update_radius_m", update_radius_m_);
+
+  RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_radius_m: %f", update_radius_m_);
   
-  declareParameter("update_window_height_m", rclcpp::ParameterValue(update_window_height_m_));
-  node->get_parameter(name_ + "." + "update_window_height_m", update_window_height_m_);
+  // declareParameter("update_window_height_m", rclcpp::ParameterValue(update_window_height_m_));
+  // node->get_parameter(name_ + "." + "update_window_height_m", update_window_height_m_);
 
-  RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_height_m: %f", update_window_height_m_);
+  // RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_height_m: %f", update_window_height_m_);
 
-  declareParameter("update_window_width_m", rclcpp::ParameterValue(update_window_width_m_));
-  node->get_parameter(name_ + "." + "update_window_width_m", update_window_width_m_);
+  // declareParameter("update_window_width_m", rclcpp::ParameterValue(update_window_width_m_));
+  // node->get_parameter(name_ + "." + "update_window_width_m", update_window_width_m_);
 
-  RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_width_m: %f", update_window_width_m_);
+  // RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_width_m: %f", update_window_width_m_);
 
   obstacle_sub_ = node->create_subscription<geometry_msgs::msg::Point>(
     "/summit/sensor_obstacles", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
@@ -215,8 +221,10 @@ AddObstacleLayer::updateCosts(
   int map_y = 0;
   unsigned int i, j = 0;  // master_grid iterators
 
-  int update_window_height_cell = static_cast<int>(std::round(update_window_height_m_ / (Resolution_m_p_c * 2.0))); 
-  int update_window_width_cell = static_cast<int>(std::round(update_window_width_m_ / (Resolution_m_p_c * 2.0))); 
+  // int update_window_height_cell = static_cast<int>(std::round(update_window_height_m_ / (Resolution_m_p_c * 2.0))); 
+  // int update_window_width_cell = static_cast<int>(std::round(update_window_width_m_ / (Resolution_m_p_c * 2.0))); 
+
+  int update_radius_cell = static_cast<int>(std::round(update_radius_m_ / Resolution_m_p_c)); 
 
   int map_x_min = 0;
   int map_y_min = 0;
@@ -280,10 +288,15 @@ AddObstacleLayer::updateCosts(
         return;
       }
 
-      map_x_min = std::max(min_i, map_x - update_window_height_cell);
-      map_y_min = std::max(min_j, map_y - update_window_width_cell);
-      map_x_max = std::min(max_i, map_x + update_window_height_cell);
-      map_y_max = std::min(max_j, map_y + update_window_width_cell);
+      // map_x_min = std::max(min_i, map_x - update_window_height_cell);
+      // map_y_min = std::max(min_j, map_y - update_window_width_cell);
+      // map_x_max = std::min(max_i, map_x + update_window_height_cell);
+      // map_y_max = std::min(max_j, map_y + update_window_width_cell);
+
+      map_x_min = std::max(min_i, map_x - update_radius_cell);
+      map_y_min = std::max(min_j, map_y - update_radius_cell);
+      map_x_max = std::min(max_i, map_x + update_radius_cell);
+      map_y_max = std::min(max_j, map_y + update_radius_cell);
 
       // unsigned<-signed conversions.
       map_x_min_u = static_cast<unsigned int>(map_x_min);
@@ -293,11 +306,19 @@ AddObstacleLayer::updateCosts(
       
       // Main master_grid updating loop
 
+      double ellipse_center_x = static_cast<double>(map_x_min_u + map_x_max_u) / 2.0;
+      double ellipse_center_y = static_cast<double>(map_y_min_u + map_y_max_u) / 2.0; 
+
+      double ellipse_a = static_cast<double>(map_x_max_u - map_x_min_u) / 2.0;
+      double ellipse_b = static_cast<double>(map_y_max_u - map_y_min_u) / 2.0;
+
       for (i = map_x_min_u; i < map_x_max_u; i++) {
         for (j = map_y_min_u; j < map_y_max_u; j++) {
           unsigned char cost = master_grid.getCost(i, j);
 
-          if (cost != LETHAL_OBSTACLE)
+          double dist = (pow((i - ellipse_center_x), 2.0) / pow(ellipse_a, 2.0)) + (pow((j - ellipse_center_y), 2.0) / pow(ellipse_b, 2.0));
+          // if (cost != LETHAL_OBSTACLE)
+          if ((dist <= 1.0)  && (cost != LETHAL_OBSTACLE))
           {
             master_grid.setCost(i, j, LETHAL_OBSTACLE);
           }

@@ -106,8 +106,9 @@ private:
 
   std::vector<std::pair<double, double>> obstacle_vec_;  // x & y coordinates of obstacles in map frame
 
-  double update_window_height_m_;
-  double update_window_width_m_;
+  // double update_window_height_m_;
+  // double update_window_width_m_;
+  double update_radius_m_;
 };
 
 }  // namespace nav2_costmap_2d
