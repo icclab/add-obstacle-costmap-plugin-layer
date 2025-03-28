@@ -109,6 +109,7 @@ private:
   double update_radius_m_;
   double update_window_height_m_;
   double update_window_width_m_;
+  double cost_scaling_factor_;
 };
 
 }  // namespace nav2_costmap_2d

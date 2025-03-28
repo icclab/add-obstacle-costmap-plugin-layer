@@ -70,7 +70,8 @@ AddObstacleLayer::AddObstacleLayer()
   obstacle_sub_(nullptr),
   update_radius_m_(1.0),
   update_window_height_m_(1.0),
-  update_window_width_m_(1.0)
+  update_window_width_m_(1.0),
+  cost_scaling_factor_(0.05)
 {
   access_ = new mutex_t();
 }
@@ -97,6 +98,11 @@ AddObstacleLayer::onInitialize()
 
   // RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_radius_m: %f", update_radius_m_);
   
+  declareParameter("cost_scaling_factor", rclcpp::ParameterValue(cost_scaling_factor_));
+  node->get_parameter(name_ + "." + "cost_scaling_factor", cost_scaling_factor_);
+
+  RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: cost_scaling_factor: %f", cost_scaling_factor_);
+
   declareParameter("update_window_height_m", rclcpp::ParameterValue(update_window_height_m_));
   node->get_parameter(name_ + "." + "update_window_height_m", update_window_height_m_);
 
@@ -288,10 +294,12 @@ AddObstacleLayer::updateCosts(
         return;
       }
 
+      // Elliptical region around the obstacle
+
       map_x_min = std::max(min_i, map_x - update_window_height_cell);
       map_y_min = std::max(min_j, map_y - update_window_width_cell);
-      map_x_max = std::min(max_i, map_x + update_window_height_cell);
-      map_y_max = std::min(max_j, map_y + update_window_width_cell);
+      map_x_max = std::min(max_i, map_x + update_window_height_cell + 1);
+      map_y_max = std::min(max_j, map_y + update_window_width_cell + 1);
 
       // map_x_min = std::max(min_i, map_x - update_radius_cell);
       // map_y_min = std::max(min_j, map_y - update_radius_cell);
@@ -312,15 +320,55 @@ AddObstacleLayer::updateCosts(
       double ellipse_a = static_cast<double>(map_x_max_u - map_x_min_u) / 2.0;
       double ellipse_b = static_cast<double>(map_y_max_u - map_y_min_u) / 2.0;
 
+      // for (i = map_x_min_u; i < map_x_max_u; i++) {
+      //   for (j = map_y_min_u; j < map_y_max_u; j++) {
+      //     unsigned char cost = master_grid.getCost(i, j);
+
+      //     double dist = (pow((i - ellipse_center_x), 2.0) / pow(ellipse_a, 2.0)) + (pow((j - ellipse_center_y), 2.0) / pow(ellipse_b, 2.0));
+      //     // if (cost != LETHAL_OBSTACLE)
+      //     if ((dist <= 1.0)  && (cost != LETHAL_OBSTACLE))
+      //     {
+      //       master_grid.setCost(i, j, LETHAL_OBSTACLE);
+      //     }
+      //   }
+      // }
+
+      // Elliptical Inflation region around the obstacle
+
+      double small_ellipse_a = ellipse_a / 2.0;
+      double small_ellipse_b = ellipse_b / 2.0;
+
+      unsigned int min_ellipse_x =  static_cast<unsigned int>(ellipse_center_x - small_ellipse_a);
+      unsigned int max_ellipse_x =  static_cast<unsigned int>(ellipse_center_x + small_ellipse_a) + 1;
+
+      unsigned int min_ellipse_y =  static_cast<unsigned int>(ellipse_center_y - small_ellipse_b);
+      unsigned int max_ellipse_y =  static_cast<unsigned int>(ellipse_center_y + small_ellipse_b) + 1;
+      
       for (i = map_x_min_u; i < map_x_max_u; i++) {
         for (j = map_y_min_u; j < map_y_max_u; j++) {
           unsigned char cost = master_grid.getCost(i, j);
 
-          double dist = (pow((i - ellipse_center_x), 2.0) / pow(ellipse_a, 2.0)) + (pow((j - ellipse_center_y), 2.0) / pow(ellipse_b, 2.0));
-          // if (cost != LETHAL_OBSTACLE)
-          if ((dist <= 1.0)  && (cost != LETHAL_OBSTACLE))
+          double dist_big = (pow(i - ellipse_center_x, 2.0) / pow(ellipse_a, 2.0)) + (pow(j - ellipse_center_y, 2.0) / pow(ellipse_b, 2.0));
+          double dist_small = (pow(i - ellipse_center_x, 2.0) / pow(small_ellipse_a, 2.0)) + (pow(j - ellipse_center_y, 2.0) / pow(small_ellipse_b, 2.0));
+          
+          if ((i >= min_ellipse_x) && (i < max_ellipse_x) && (j >= min_ellipse_y) && (j < max_ellipse_y))
           {
-            master_grid.setCost(i, j, LETHAL_OBSTACLE);
+            if ((dist_small <= 1.0)  && (cost != LETHAL_OBSTACLE))
+            {
+              master_grid.setCost(i, j, LETHAL_OBSTACLE);
+            }
+          }
+
+          if ((dist_big <= 1.0)  && (cost != LETHAL_OBSTACLE))
+          {
+            double euclid_dist = sqrt(pow(i - ellipse_center_x, 2.0) + pow(j - ellipse_center_y, 2.0));
+    
+            double factor = exp(-1.0 * cost_scaling_factor_ * euclid_dist);          
+            unsigned char exp_cost = static_cast<unsigned char>((INSCRIBED_INFLATED_OBSTACLE - 1) * factor);
+              
+            master_grid.setCost(i, j, exp_cost);
+
+            // RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: euclid_dist = %f, factor = %f, exp_cost = %u", euclid_dist, factor, exp_cost);
           }
         }
       }
