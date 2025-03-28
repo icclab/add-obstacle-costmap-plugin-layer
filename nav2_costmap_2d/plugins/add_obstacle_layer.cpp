@@ -68,9 +68,9 @@ AddObstacleLayer::AddObstacleLayer()
   msg_wx_(-std::numeric_limits<float>::max()),
   msg_wy_(-std::numeric_limits<float>::max()),
   obstacle_sub_(nullptr),
-  update_radius_m_(1.0)
-  // update_window_height_m_(1.0),
-  // update_window_width_m_(1.0),
+  update_radius_m_(1.0),
+  update_window_height_m_(1.0),
+  update_window_width_m_(1.0)
 {
   access_ = new mutex_t();
 }
@@ -92,20 +92,20 @@ AddObstacleLayer::onInitialize()
   declareParameter("enabled", rclcpp::ParameterValue(true));
   node->get_parameter(name_ + "." + "enabled", enabled_);
 
-  declareParameter("update_radius_m", rclcpp::ParameterValue(update_radius_m_));
-  node->get_parameter(name_ + "." + "update_radius_m", update_radius_m_);
+  // declareParameter("update_radius_m", rclcpp::ParameterValue(update_radius_m_));
+  // node->get_parameter(name_ + "." + "update_radius_m", update_radius_m_);
 
-  RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_radius_m: %f", update_radius_m_);
+  // RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_radius_m: %f", update_radius_m_);
   
-  // declareParameter("update_window_height_m", rclcpp::ParameterValue(update_window_height_m_));
-  // node->get_parameter(name_ + "." + "update_window_height_m", update_window_height_m_);
+  declareParameter("update_window_height_m", rclcpp::ParameterValue(update_window_height_m_));
+  node->get_parameter(name_ + "." + "update_window_height_m", update_window_height_m_);
 
-  // RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_height_m: %f", update_window_height_m_);
+  RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_height_m: %f", update_window_height_m_);
 
-  // declareParameter("update_window_width_m", rclcpp::ParameterValue(update_window_width_m_));
-  // node->get_parameter(name_ + "." + "update_window_width_m", update_window_width_m_);
+  declareParameter("update_window_width_m", rclcpp::ParameterValue(update_window_width_m_));
+  node->get_parameter(name_ + "." + "update_window_width_m", update_window_width_m_);
 
-  // RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_width_m: %f", update_window_width_m_);
+  RCLCPP_INFO(rclcpp::get_logger("nav2_costmap_2d"), "AddObstacleLayer: update_window_width_m: %f", update_window_width_m_);
 
   obstacle_sub_ = node->create_subscription<geometry_msgs::msg::Point>(
     "/summit/sensor_obstacles", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
@@ -221,10 +221,10 @@ AddObstacleLayer::updateCosts(
   int map_y = 0;
   unsigned int i, j = 0;  // master_grid iterators
 
-  // int update_window_height_cell = static_cast<int>(std::round(update_window_height_m_ / (Resolution_m_p_c * 2.0))); 
-  // int update_window_width_cell = static_cast<int>(std::round(update_window_width_m_ / (Resolution_m_p_c * 2.0))); 
+  int update_window_height_cell = static_cast<int>(std::round(update_window_height_m_ / (Resolution_m_p_c * 2.0))); 
+  int update_window_width_cell = static_cast<int>(std::round(update_window_width_m_ / (Resolution_m_p_c * 2.0))); 
 
-  int update_radius_cell = static_cast<int>(std::round(update_radius_m_ / Resolution_m_p_c)); 
+  // int update_radius_cell = static_cast<int>(std::round(update_radius_m_ / Resolution_m_p_c)); 
 
   int map_x_min = 0;
   int map_y_min = 0;
@@ -288,15 +288,15 @@ AddObstacleLayer::updateCosts(
         return;
       }
 
-      // map_x_min = std::max(min_i, map_x - update_window_height_cell);
-      // map_y_min = std::max(min_j, map_y - update_window_width_cell);
-      // map_x_max = std::min(max_i, map_x + update_window_height_cell);
-      // map_y_max = std::min(max_j, map_y + update_window_width_cell);
+      map_x_min = std::max(min_i, map_x - update_window_height_cell);
+      map_y_min = std::max(min_j, map_y - update_window_width_cell);
+      map_x_max = std::min(max_i, map_x + update_window_height_cell);
+      map_y_max = std::min(max_j, map_y + update_window_width_cell);
 
-      map_x_min = std::max(min_i, map_x - update_radius_cell);
-      map_y_min = std::max(min_j, map_y - update_radius_cell);
-      map_x_max = std::min(max_i, map_x + update_radius_cell);
-      map_y_max = std::min(max_j, map_y + update_radius_cell);
+      // map_x_min = std::max(min_i, map_x - update_radius_cell);
+      // map_y_min = std::max(min_j, map_y - update_radius_cell);
+      // map_x_max = std::min(max_i, map_x + update_radius_cell);
+      // map_y_max = std::min(max_j, map_y + update_radius_cell);
 
       // unsigned<-signed conversions.
       map_x_min_u = static_cast<unsigned int>(map_x_min);
